@@ -1,6 +1,7 @@
 --[[ 
     DEATH NOTE: ULTIMATE VIEW & KILL EDITION
     - Phím tắt: Right Control để ẩn/hiện menu.
+    - Chế độ: Xả toàn bộ bom trong Backpack.
 ]]
 
 local Players = game:GetService("Players")
@@ -16,14 +17,14 @@ if gethui():FindFirstChild("DeathNote_Ultimate_View") then
     gethui():FindFirstChild("DeathNote_Ultimate_View"):Destroy()
 end
 
--- --- GIAO DIỆN ---
+-- --- GIAO DIỆN (GIỮ NGUYÊN) ---
 local Gui = Instance.new("ScreenGui")
 Gui.Name = "DeathNote_Ultimate_View"
 Gui.Parent = gethui()
 Gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 
 local Main = Instance.new("Frame")
-Main.Size = UDim2.new(0, 320, 0, 480) -- Tăng chiều cao để đủ chỗ cho nút mới
+Main.Size = UDim2.new(0, 320, 0, 480)
 Main.Position = UDim2.new(0.5, -160, 0.5, -240)
 Main.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 Main.BorderSizePixel = 0
@@ -50,7 +51,6 @@ Cover.BorderSizePixel = 0
 Cover.ZIndex = 2
 Cover.Parent = Main
 
--- --- UI TƯƠNG TÁC ---
 local Box = Instance.new("TextBox")
 Box.Size = UDim2.new(0.7, 0, 0, 35)
 Box.Position = UDim2.new(0.15, 0, 0.4, 0)
@@ -77,7 +77,6 @@ ExecuteBtn.Parent = Main
 Instance.new("UICorner", ExecuteBtn).CornerRadius = UDim.new(0, 8)
 Instance.new("UIStroke", ExecuteBtn).Color = Color3.new(1, 1, 1)
 
--- NÚT VIEW MỤC TIÊU
 local ViewBtn = Instance.new("TextButton")
 ViewBtn.Size = UDim2.new(0.45, 0, 0, 30)
 ViewBtn.Position = UDim2.new(0.275, 0, 0.72, 0)
@@ -105,16 +104,37 @@ CooldownBar.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 CooldownBar.BorderSizePixel = 0
 CooldownBar.Parent = CooldownBack
 
--- --- LOGIC ---
+-- --- LOGIC MỚI: XẢ TẤT CẢ BOM ---
 local targetPart = nil
 local active = false
 local onCooldown = false
 local viewing = false
 
--- Auto-fill 3+ ký tự
+-- Hàm lấy và kích hoạt mọi quả bom trong người
+local function UseAllBombs()
+    local char = LocalPlayer.Character
+    if not char then return false end
+    
+    local items = LocalPlayer.Backpack:GetChildren()
+    local found = false
+    
+    for _, item in ipairs(items) do
+        if item:IsA("Tool") and item.Name == "Time_Ball" then
+            item.Parent = char
+            task.spawn(function() -- Dùng spawn để kích hoạt đồng thời
+                task.wait(0.01)
+                item:Activate()
+            end)
+            found = true
+        end
+    end
+    return found
+end
+
+-- Tự động điền tên
 Box:GetPropertyChangedSignal("Text"):Connect(function()
     local text = Box.Text
-    if #text < 5 then return end
+    if #text < 3 then return end
     local search = text:sub(1,1) == "@" and text:sub(2) or text
     for _, p in ipairs(Players:GetPlayers()) do
         if p.Name:lower():sub(1, #search) == search:lower() or p.DisplayName:lower():sub(1, #search) == search:lower() then
@@ -127,24 +147,15 @@ Box:GetPropertyChangedSignal("Text"):Connect(function()
     end
 end)
 
-local function UseTimeBall()
-    local char = LocalPlayer.Character
-    local tool = LocalPlayer.Backpack:FindFirstChild("Time_Ball") or (char and char:FindFirstChild("Time_Ball"))
-    if tool then
-        tool.Parent = char
-        task.wait(0.05)
-        tool:Activate()
-        return true
-    end
-    return false
-end
-
 -- Xử lý nút GIẾT
 ExecuteBtn.MouseButton1Click:Connect(function()
     if onCooldown then return end
     
-    if not UseTimeBall() then
-        ExecuteBtn.Text = "Cần Bơm"
+    -- Xả toàn bộ bom
+    local success = UseAllBombs()
+    
+    if not success then
+        ExecuteBtn.Text = "HẾT BOM"
         ExecuteBtn.TextColor3 = Color3.fromRGB(255, 100, 100)
         task.wait(1)
         ExecuteBtn.Text = "GIẾT"
@@ -159,7 +170,7 @@ ExecuteBtn.MouseButton1Click:Connect(function()
     end
 
     onCooldown = true
-    ExecuteBtn.Text = "ĐANG GIẾT..."
+    ExecuteBtn.Text = "ĐANG XẢ BOM..."
     ExecuteBtn.TextColor3 = Color3.fromRGB(255, 0, 0)
     CooldownBack.Visible = true
     CooldownBar.Size = UDim2.new(1, 0, 1, 0)
@@ -198,9 +209,9 @@ ViewBtn.MouseButton1Click:Connect(function()
     end
 end)
 
--- Vòng lặp Truy đuổi & Check Camera
+-- Vòng lặp Truy đuổi
 RunService.Stepped:Connect(function()
-    -- Cập nhật View nếu người đó còn sống
+    -- Cập nhật Camera View
     if viewing then
         local targetPlayer = Players:FindFirstChild(Box.Text)
         if targetPlayer and targetPlayer.Character and targetPlayer.Character:FindFirstChild("Humanoid") then
@@ -213,6 +224,7 @@ RunService.Stepped:Connect(function()
         end
     end
 
+    -- Điều khiển mọi quả bom bay tới mục tiêu
     if active and targetPart then
         pcall(function() sethiddenproperty(LocalPlayer, "SimulationRadius", 10000) end)
         for _, v in ipairs(Workspace:GetChildren()) do
@@ -221,7 +233,7 @@ RunService.Stepped:Connect(function()
                 local direction = (targetPart.Position - v.Position).Unit
                 local distance = (targetPart.Position - v.Position).Magnitude
                 if distance > 2 then
-                    v.Velocity = direction * 500 -- Tăng tốc độ bay nhẹ
+                    v.Velocity = direction * 600 -- Tốc độ bay của bom
                     v.CFrame = CFrame.new(v.Position, targetPart.Position)
                 else
                     v.Velocity = Vector3.new(0, 0, 0)
